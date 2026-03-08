@@ -1,0 +1,21 @@
+# Excluded from repo (per user request)
+.claude/
+Cosine Similarity Heatmap.png
+CLAUDE.md
+
+# Summary scripts and outputs (excluded)
+create_summary_doc.py
+create_project_summary_docx.py
+Project_Summary_Part_C.docx
+Project_Summary_Report.docx
+
+# Assignment PDFs (excluded)
+פרויקט חלק ב.pdf
+פרויקט חלק ג.pdf
+פרויקט חלק א - 2025 - ניקוי נתונים.pdf
+
+# Common ignores
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.DS_Store

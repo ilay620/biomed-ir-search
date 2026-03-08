@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BioMed IR Search Engine</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+:root {
+  --primary: #2563eb;
+  --primary-dark: #1d4ed8;
+  --primary-light: #dbeafe;
+  --success: #10b981;
+  --success-light: #d1fae5;
+  --amber: #f59e0b;
+  --amber-light: #fef3c7;
+  --red: #ef4444;
+  --text: #1e293b;
+  --text-secondary: #64748b;
+  --text-muted: #94a3b8;
+  --bg: #f1f5f9;
+  --surface: #ffffff;
+  --border: #e2e8f0;
+  --shadow: 0 1px 3px rgba(0,0,0,.1), 0 1px 2px rgba(0,0,0,.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0,0,0,.1), 0 4px 6px -2px rgba(0,0,0,.05);
+  --radius: 10px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg); color: var(--text); line-height: 1.6;
+  min-height: 100vh;
+}
+
+/* Loading */
+#loading {
+  position: fixed; inset: 0; background: var(--surface);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  z-index: 9999;
+}
+#loading h2 { color: var(--primary); margin-bottom: 16px; font-size: 1.5rem; }
+#loading p { color: var(--text-secondary); }
+.spinner {
+  width: 40px; height: 40px; border: 4px solid var(--border);
+  border-top-color: var(--primary); border-radius: 50%;
+  animation: spin .8s linear infinite; margin-bottom: 20px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Nav */
+nav {
+  background: var(--primary-dark); color: white; padding: 0 32px;
+  display: flex; align-items: center; justify-content: space-between;
+  height: 60px; box-shadow: var(--shadow-lg); position: sticky; top: 0; z-index: 100;
+}
+.nav-brand { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.5px; }
+.nav-brand span { font-weight: 400; opacity: .7; font-size: .85rem; margin-left: 12px; }
+.nav-links { display: flex; gap: 4px; }
+.nav-links a {
+  color: rgba(255,255,255,.7); text-decoration: none; padding: 8px 20px;
+  border-radius: 8px; font-weight: 500; transition: all .2s;
+}
+.nav-links a:hover { color: white; background: rgba(255,255,255,.1); }
+.nav-links a.active { color: white; background: rgba(255,255,255,.15); }
+
+/* Main */
+main { max-width: 1300px; margin: 0 auto; padding: 32px 24px; }
+.hidden { display: none !important; }
+
+/* Search Controls */
+.search-bar {
+  background: var(--surface); border-radius: var(--radius); padding: 28px 32px;
+  box-shadow: var(--shadow); display: flex; gap: 20px; align-items: end;
+  flex-wrap: wrap;
+}
+.select-group { flex: 1; min-width: 240px; }
+.select-group label {
+  display: block; font-size: .8rem; font-weight: 600; color: var(--text-secondary);
+  text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px;
+}
+.select-group select {
+  width: 100%; padding: 10px 14px; border: 2px solid var(--border);
+  border-radius: 8px; font-size: .95rem; color: var(--text);
+  background: var(--surface); cursor: pointer; transition: border-color .2s;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%2364748b' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 6l3.5 4 3.5-4z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center;
+}
+.select-group select:focus { border-color: var(--primary); outline: none; }
+
+/* Query Info */
+.query-info {
+  background: var(--primary-light); border-left: 4px solid var(--primary);
+  border-radius: var(--radius); padding: 20px 24px; margin-top: 24px;
+}
+.query-info h3 { color: var(--primary-dark); margin-bottom: 8px; font-size: 1.1rem; }
+.query-info .field { margin-bottom: 6px; }
+.query-info .field-label {
+  font-weight: 600; color: var(--primary-dark); font-size: .85rem;
+  text-transform: uppercase; letter-spacing: .3px;
+}
+.query-info .field-value { color: var(--text); margin-top: 2px; }
+
+/* Tabs */
+.tabs {
+  display: flex; gap: 0; margin-top: 24px; border-bottom: 2px solid var(--border);
+}
+.tab-btn {
+  padding: 12px 28px; border: none; background: none; cursor: pointer;
+  font-size: .95rem; font-weight: 600; color: var(--text-muted);
+  border-bottom: 3px solid transparent; margin-bottom: -2px; transition: all .2s;
+}
+.tab-btn:hover { color: var(--text-secondary); }
+.tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+/* Results Summary */
+.results-summary {
+  display: flex; gap: 20px; align-items: center; margin: 20px 0;
+  flex-wrap: wrap;
+}
+.results-summary .stat {
+  background: var(--surface); padding: 8px 16px; border-radius: 8px;
+  font-size: .85rem; color: var(--text-secondary); box-shadow: var(--shadow);
+}
+.results-summary .stat strong { color: var(--text); }
+
+/* Results Grid */
+.results-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 16px; margin-top: 16px;
+}
+.result-card {
+  background: var(--surface); border-radius: var(--radius); padding: 18px 20px;
+  box-shadow: var(--shadow); cursor: pointer; transition: all .2s;
+  border-left: 4px solid transparent; position: relative;
+}
+.result-card:hover { box-shadow: var(--shadow-lg); transform: translateY(-2px); }
+.result-card.relevant { border-left-color: var(--success); }
+.card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 10px;
+}
+.rank {
+  background: var(--primary); color: white; font-size: .75rem; font-weight: 700;
+  padding: 3px 10px; border-radius: 12px;
+}
+.doc-id { color: var(--text-muted); font-size: .78rem; font-family: monospace; }
+.relevant-badge {
+  background: var(--success-light); color: var(--success); font-size: .72rem;
+  font-weight: 700; padding: 3px 10px; border-radius: 12px;
+  text-transform: uppercase; letter-spacing: .3px;
+}
+.card-title {
+  font-size: .95rem; font-weight: 600; color: var(--text); margin-bottom: 8px;
+  line-height: 1.4;
+}
+.card-abstract {
+  font-size: .83rem; color: var(--text-secondary); line-height: 1.5;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.card-footer {
+  display: flex; justify-content: flex-end; margin-top: 12px;
+  padding-top: 10px; border-top: 1px solid var(--border);
+}
+.score {
+  font-size: .8rem; font-weight: 600; color: var(--primary);
+  font-family: monospace;
+}
+
+/* Modal */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.5);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000; padding: 24px; backdrop-filter: blur(2px);
+}
+.modal {
+  background: var(--surface); border-radius: 16px; max-width: 720px; width: 100%;
+  max-height: 85vh; overflow-y: auto; box-shadow: 0 25px 50px -12px rgba(0,0,0,.25);
+}
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 20px 24px; border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; background: var(--surface); z-index: 1;
+  border-radius: 16px 16px 0 0;
+}
+.modal-header h2 { font-size: 1rem; color: var(--text); }
+.modal-close {
+  background: none; border: none; font-size: 1.5rem; color: var(--text-muted);
+  cursor: pointer; padding: 4px 8px; border-radius: 6px;
+}
+.modal-close:hover { background: var(--bg); color: var(--text); }
+.modal-body { padding: 24px; }
+.modal-body h3 { font-size: 1.1rem; margin-bottom: 16px; line-height: 1.4; }
+.modal-body p { color: var(--text-secondary); line-height: 1.7; margin-bottom: 16px; }
+.modal-meta {
+  display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px;
+}
+.modal-meta .tag {
+  padding: 4px 12px; border-radius: 8px; font-size: .8rem; font-weight: 600;
+}
+.tag-rank { background: var(--primary-light); color: var(--primary-dark); }
+.tag-score { background: var(--amber-light); color: #92400e; }
+.tag-relevant { background: var(--success-light); color: #065f46; }
+.tag-not-relevant { background: #fee2e2; color: #991b1b; }
+
+/* Metrics */
+.metrics-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px; margin: 20px 0;
+}
+.metric-card {
+  background: var(--surface); border-radius: var(--radius); padding: 20px;
+  box-shadow: var(--shadow); text-align: center;
+}
+.metric-card .metric-value {
+  font-size: 2rem; font-weight: 800; color: var(--primary);
+  line-height: 1.2;
+}
+.metric-card .metric-label {
+  font-size: .78rem; color: var(--text-muted); text-transform: uppercase;
+  letter-spacing: .5px; margin-top: 4px; font-weight: 600;
+}
+.metric-card.green .metric-value { color: var(--success); }
+.metric-card.amber .metric-value { color: var(--amber); }
+
+.charts-row {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 24px; margin-top: 24px;
+}
+.chart-card {
+  background: var(--surface); border-radius: var(--radius); padding: 20px;
+  box-shadow: var(--shadow);
+}
+.chart-card h4 {
+  font-size: .9rem; color: var(--text-secondary); margin-bottom: 12px;
+  font-weight: 600;
+}
+
+/* Dashboard */
+.dashboard-header {
+  margin-bottom: 32px;
+}
+.dashboard-header h2 { font-size: 1.5rem; font-weight: 700; margin-bottom: 4px; }
+.dashboard-header p { color: var(--text-secondary); }
+
+.summary-table-wrap {
+  background: var(--surface); border-radius: var(--radius); padding: 24px;
+  box-shadow: var(--shadow); margin-bottom: 32px; overflow-x: auto;
+}
+.summary-table-wrap h3 { margin-bottom: 16px; font-size: 1rem; }
+.summary-table {
+  width: 100%; border-collapse: collapse; font-size: .85rem;
+}
+.summary-table th {
+  background: var(--primary-dark); color: white; padding: 10px 14px;
+  text-align: left; font-weight: 600; white-space: nowrap;
+}
+.summary-table th:first-child { border-radius: 8px 0 0 0; }
+.summary-table th:last-child { border-radius: 0 8px 0 0; }
+.summary-table td {
+  padding: 10px 14px; border-bottom: 1px solid var(--border);
+}
+.summary-table tr:nth-child(even) td { background: #f8fafc; }
+.summary-table tr:hover td { background: var(--primary-light); }
+.summary-table .method-label {
+  font-weight: 600; color: var(--primary-dark);
+}
+
+.heatmap-cell {
+  font-weight: 600; text-align: center; border-radius: 4px;
+  padding: 6px 10px; display: inline-block; min-width: 60px;
+}
+
+.dashboard-charts {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+  gap: 24px;
+}
+.dashboard-chart-card {
+  background: var(--surface); border-radius: var(--radius); padding: 24px;
+  box-shadow: var(--shadow);
+}
+.dashboard-chart-card h3 {
+  font-size: 1rem; color: var(--text); margin-bottom: 16px; font-weight: 600;
+}
+.dashboard-chart-card.full-width {
+  grid-column: 1 / -1;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  nav { padding: 0 16px; }
+  .nav-brand span { display: none; }
+  main { padding: 16px 12px; }
+  .search-bar { padding: 16px; }
+  .results-grid { grid-template-columns: 1fr; }
+  .charts-row { grid-template-columns: 1fr; }
+  .dashboard-charts { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="spinner"></div>
+  <h2>BioMed IR Search Engine</h2>
+  <p id="loading-text">Loading data...</p>
+</div>
+
+<nav>
+  <div class="nav-brand">
+    BioMed IR Engine
+    <span>Maria Alexeenko, Ilay Sabach, Victoria Golovitsky</span>
+  </div>
+  <div class="nav-links">
+    <a href="#" data-page="search" class="active">Search</a>
+    <a href="#" data-page="dashboard">Dashboard</a>
+  </div>
+</nav>
+
+<!-- SEARCH PAGE -->
+<main id="search-page">
+  <div class="search-bar">
+    <div class="select-group">
+      <label>Query</label>
+      <select id="query-select">
+        <option value="">Select a query...</option>
+      </select>
+    </div>
+    <div class="select-group">
+      <label>Vectorization Method</label>
+      <select id="method-select">
+        <option value="">Select a method...</option>
+        <option value="Binary">Binary</option>
+        <option value="Frequency">Frequency</option>
+        <option value="TF-IDF">TF-IDF</option>
+      </select>
+    </div>
+  </div>
+
+  <div id="query-info" class="hidden"></div>
+
+  <div id="search-content" class="hidden">
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="results">Results (Top 100)</button>
+      <button class="tab-btn" data-tab="metrics">Metrics</button>
+    </div>
+
+    <div id="tab-results"></div>
+    <div id="tab-metrics" class="hidden"></div>
+  </div>
+</main>
+
+<!-- DASHBOARD PAGE -->
+<main id="dashboard-page" class="hidden"></main>
+
+<!-- MODAL -->
+<div id="modal-overlay" class="modal-overlay hidden">
+  <div class="modal" id="modal">
+    <div class="modal-header">
+      <h2 id="modal-title">Document Details</h2>
+      <button class="modal-close" id="modal-close">&times;</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+window.UI_DATA = null; // __INJECT_DATA__
+
+/* ========== STATE ========== */
+let DATA = null;
+const charts = {};
+
+/* ========== DATA LOADING ========== */
+async function loadData() {
+  if (window.UI_DATA) {
+    DATA = window.UI_DATA;
+    init();
+    return;
+  }
+  try {
+    document.getElementById('loading-text').textContent = 'Fetching ui_data.json...';
+    const resp = await fetch('ui_data.json');
+    if (!resp.ok) throw new Error('Not found');
+    DATA = await resp.json();
+    init();
+  } catch {
+    document.getElementById('loading-text').textContent =
+      'Could not load ui_data.json. Run generate_ui_data.py first, then serve with: python -m http.server 8000';
+    document.querySelector('.spinner').style.display = 'none';
+  }
+}
+
+/* ========== INIT ========== */
+function init() {
+  document.getElementById('loading').classList.add('hidden');
+  populateQueries();
+  setupNavigation();
+  setupTabs();
+  setupSearch();
+  setupModal();
+}
+
+function populateQueries() {
+  const sel = document.getElementById('query-select');
+  DATA.queries.forEach(q => {
+    const opt = document.createElement('option');
+    opt.value = q.query_id;
+    opt.textContent = `Q${q.query_id}: ${q.title}`;
+    sel.appendChild(opt);
+  });
+}
+
+/* ========== NAVIGATION ========== */
+function setupNavigation() {
+  document.querySelectorAll('[data-page]').forEach(link => {
+    link.addEventListener('click', e => {
+      e.preventDefault();
+      const page = link.dataset.page;
+      document.querySelectorAll('[data-page]').forEach(l => l.classList.remove('active'));
+      link.classList.add('active');
+      document.getElementById('search-page').classList.toggle('hidden', page !== 'search');
+      document.getElementById('dashboard-page').classList.toggle('hidden', page !== 'dashboard');
+      if (page === 'dashboard') renderDashboard();
+    });
+  });
+}
+
+/* ========== TABS ========== */
+function setupTabs() {
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const tab = btn.dataset.tab;
+      document.getElementById('tab-results').classList.toggle('hidden', tab !== 'results');
+      document.getElementById('tab-metrics').classList.toggle('hidden', tab !== 'metrics');
+    });
+  });
+}
+
+/* ========== SEARCH ========== */
+function setupSearch() {
+  const qSel = document.getElementById('query-select');
+  const mSel = document.getElementById('method-select');
+  const onChange = () => {
+    const qid = qSel.value;
+    const method = mSel.value;
+    if (qid && method) {
+      showSearchResults(qid, method);
+    } else {
+      document.getElementById('search-content').classList.add('hidden');
+      if (qid) showQueryInfo(qid); else document.getElementById('query-info').classList.add('hidden');
+    }
+  };
+  qSel.addEventListener('change', onChange);
+  mSel.addEventListener('change', onChange);
+}
+
+function showQueryInfo(qid) {
+  const q = DATA.queries.find(x => x.query_id === qid);
+  const el = document.getElementById('query-info');
+  el.classList.remove('hidden');
+  el.innerHTML = `
+    <h3>Query ${q.query_id}: ${esc(q.title)}</h3>
+    <div class="field"><span class="field-label">Need:</span>
+      <div class="field-value">${esc(q.need)}</div></div>
+    <div class="field"><span class="field-label">Context:</span>
+      <div class="field-value">${esc(q.context)}</div></div>
+  `;
+}
+
+function showSearchResults(qid, method) {
+  showQueryInfo(qid);
+  document.getElementById('search-content').classList.remove('hidden');
+
+  // Reset to results tab
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector('.tab-btn[data-tab="results"]').classList.add('active');
+  document.getElementById('tab-results').classList.remove('hidden');
+  document.getElementById('tab-metrics').classList.add('hidden');
+
+  renderResults(qid, method);
+  renderMetrics(qid, method);
+}
+
+/* ========== RESULTS ========== */
+function renderResults(qid, method) {
+  const results = DATA.results[method][qid];
+  const relevant = new Set(DATA.qrels[qid] || []);
+  const tpCount = results.filter(r => relevant.has(r.doc_id)).length;
+
+  let html = `<div class="results-summary">
+    <div class="stat"><strong>100</strong> results retrieved</div>
+    <div class="stat"><strong>${tpCount}</strong> relevant found</div>
+    <div class="stat">Score range: <strong>${results[results.length-1].score.toFixed(4)}</strong> &mdash; <strong>${results[0].score.toFixed(4)}</strong></div>
+  </div><div class="results-grid">`;
+
+  results.forEach((r, i) => {
+    const doc = DATA.documents[r.doc_id] || { title: 'Unknown', abstract: '' };
+    const isRel = relevant.has(r.doc_id);
+    html += `
+      <div class="result-card ${isRel ? 'relevant' : ''}"
+           onclick="openDocModal('${r.doc_id}', ${i+1}, ${r.score}, ${isRel})">
+        <div class="card-header">
+          <span class="rank">#${i+1}</span>
+          ${isRel ? '<span class="relevant-badge">Relevant</span>' : ''}
+          <span class="doc-id">${r.doc_id}</span>
+        </div>
+        <div class="card-title">${esc(doc.title)}</div>
+        <p class="card-abstract">${esc(doc.abstract)}</p>
+        <div class="card-footer">
+          <span class="score">Cosine: ${r.score.toFixed(6)}</span>
+        </div>
+      </div>`;
+  });
+  html += '</div>';
+  document.getElementById('tab-results').innerHTML = html;
+}
+
+/* ========== MODAL ========== */
+function setupModal() {
+  document.getElementById('modal-close').addEventListener('click', closeModal);
+  document.getElementById('modal-overlay').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeModal();
+  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+}
+
+function openDocModal(docId, rank, score, isRelevant) {
+  const doc = DATA.documents[docId] || { title: 'Unknown', abstract: 'No abstract available.' };
+  const body = document.getElementById('modal-body');
+  body.innerHTML = `
+    <div class="modal-meta">
+      <span class="tag tag-rank">Rank #${rank}</span>
+      <span class="tag tag-score">Score: ${score.toFixed(6)}</span>
+      <span class="tag ${isRelevant ? 'tag-relevant' : 'tag-not-relevant'}">
+        ${isRelevant ? 'Relevant' : 'Not Relevant'}
+      </span>
+    </div>
+    <p style="color:var(--text-muted);font-size:.82rem;margin-bottom:12px;">
+      Document ID: ${docId}
+    </p>
+    <h3>${esc(doc.title)}</h3>
+    <p>${esc(doc.abstract)}</p>
+  `;
+  document.getElementById('modal-overlay').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.add('hidden');
+  document.body.style.overflow = '';
+}
+
+/* ========== METRICS ========== */
+function renderMetrics(qid, method) {
+  const m = DATA.metrics[method][qid];
+  const relevant = new Set(DATA.qrels[qid] || []);
+  const methods = ['Binary', 'Frequency', 'TF-IDF'];
+  const methodColors = { 'Binary': '#3b82f6', 'Frequency': '#f59e0b', 'TF-IDF': '#10b981' };
+
+  let html = `
+    <div class="metrics-grid">
+      <div class="metric-card"><div class="metric-value">${(m.precision * 100).toFixed(1)}%</div><div class="metric-label">Precision</div></div>
+      <div class="metric-card green"><div class="metric-value">${(m.recall * 100).toFixed(1)}%</div><div class="metric-label">Recall</div></div>
+      <div class="metric-card amber"><div class="metric-value">${(m.f1 * 100).toFixed(1)}%</div><div class="metric-label">F1 Score</div></div>
+      <div class="metric-card"><div class="metric-value">${m.tp}/${m.relevant_count}</div><div class="metric-label">Relevant Found</div></div>
+    </div>
+    <div class="charts-row">
+      <div class="chart-card">
+        <h4>Method Comparison for Query ${qid}</h4>
+        <canvas id="chart-method-compare"></canvas>
+      </div>
+      <div class="chart-card">
+        <h4>Precision@K Curve</h4>
+        <canvas id="chart-precision-at-k"></canvas>
+      </div>
+    </div>
+    <div class="charts-row" style="margin-top:0">
+      <div class="chart-card">
+        <h4>Score Distribution (Top 100) &mdash; Relevant vs Non-Relevant</h4>
+        <canvas id="chart-score-dist"></canvas>
+      </div>
+      <div class="chart-card">
+        <h4>Cumulative Relevant Documents Found</h4>
+        <canvas id="chart-cumulative-rel"></canvas>
+      </div>
+    </div>`;
+  document.getElementById('tab-metrics').innerHTML = html;
+
+  // 1. Method Comparison Bar Chart
+  const pVals = methods.map(mt => DATA.metrics[mt][qid].precision);
+  const rVals = methods.map(mt => DATA.metrics[mt][qid].recall);
+  const fVals = methods.map(mt => DATA.metrics[mt][qid].f1);
+  makeChart('chart-method-compare', {
+    type: 'bar',
+    data: {
+      labels: methods,
+      datasets: [
+        { label: 'Precision', data: pVals, backgroundColor: '#3b82f6' },
+        { label: 'Recall', data: rVals, backgroundColor: '#f59e0b' },
+        { label: 'F1', data: fVals, backgroundColor: '#10b981' }
+      ]
+    },
+    options: { responsive: true, scales: { y: { beginAtZero: true, max: 1 } },
+      plugins: { legend: { position: 'bottom' } } }
+  });
+
+  // 2. Precision@K Curve (all methods)
+  const pakDatasets = methods.map(mt => {
+    const res = DATA.results[mt][qid];
+    const ks = [5,10,15,20,25,30,40,50,60,70,80,90,100];
+    const points = ks.map(k => {
+      let tp = 0;
+      for (let i = 0; i < k && i < res.length; i++) {
+        if (relevant.has(res[i].doc_id)) tp++;
+      }
+      return tp / k;
+    });
+    return { label: mt, data: points, borderColor: methodColors[mt],
+             backgroundColor: 'transparent', tension: 0.3, pointRadius: 3 };
+  });
+  makeChart('chart-precision-at-k', {
+    type: 'line',
+    data: { labels: [5,10,15,20,25,30,40,50,60,70,80,90,100], datasets: pakDatasets },
+    options: { responsive: true, scales: {
+      x: { title: { display: true, text: 'K (documents retrieved)' } },
+      y: { beginAtZero: true, max: 1, title: { display: true, text: 'Precision@K' } }
+    }, plugins: { legend: { position: 'bottom' } } }
+  });
+
+  // 3. Score Distribution
+  const results = DATA.results[method][qid];
+  const relScores = [], nonRelScores = [];
+  results.forEach(r => {
+    if (relevant.has(r.doc_id)) relScores.push(r.score);
+    else nonRelScores.push(r.score);
+  });
+  const allScores = results.map(r => r.score);
+  const minS = Math.min(...allScores), maxS = Math.max(...allScores);
+  const numBins = 15;
+  const binWidth = (maxS - minS) / numBins || 0.01;
+  const binLabels = [];
+  const relBins = new Array(numBins).fill(0);
+  const nonRelBins = new Array(numBins).fill(0);
+  for (let i = 0; i < numBins; i++) {
+    const lo = minS + i * binWidth;
+    binLabels.push(lo.toFixed(3));
+  }
+  results.forEach(r => {
+    let bin = Math.floor((r.score - minS) / binWidth);
+    if (bin >= numBins) bin = numBins - 1;
+    if (bin < 0) bin = 0;
+    if (relevant.has(r.doc_id)) relBins[bin]++; else nonRelBins[bin]++;
+  });
+  makeChart('chart-score-dist', {
+    type: 'bar',
+    data: {
+      labels: binLabels,
+      datasets: [
+        { label: 'Relevant', data: relBins, backgroundColor: 'rgba(16,185,129,.7)' },
+        { label: 'Not Relevant', data: nonRelBins, backgroundColor: 'rgba(148,163,184,.5)' }
+      ]
+    },
+    options: { responsive: true, scales: {
+      x: { stacked: true, title: { display: true, text: 'Cosine Similarity' } },
+      y: { stacked: true, beginAtZero: true, title: { display: true, text: 'Count' } }
+    }, plugins: { legend: { position: 'bottom' } } }
+  });
+
+  // 4. Cumulative Relevant Found
+  const cumDatasets = methods.map(mt => {
+    const res = DATA.results[mt][qid];
+    let tp = 0;
+    const cumData = res.map((r, i) => {
+      if (relevant.has(r.doc_id)) tp++;
+      return tp;
+    });
+    // Sample at every 5th rank
+    const sampled = [];
+    const sampledLabels = [];
+    for (let i = 4; i < 100; i += 5) {
+      sampled.push(cumData[i]);
+    }
+    return { label: mt, data: sampled, borderColor: methodColors[mt],
+             backgroundColor: 'transparent', tension: 0.3, pointRadius: 2 };
+  });
+  const cumLabels = [];
+  for (let i = 5; i <= 100; i += 5) cumLabels.push(i);
+  makeChart('chart-cumulative-rel', {
+    type: 'line',
+    data: { labels: cumLabels, datasets: cumDatasets },
+    options: { responsive: true, scales: {
+      x: { title: { display: true, text: 'Rank' } },
+      y: { beginAtZero: true, title: { display: true, text: 'Relevant Found' } }
+    }, plugins: { legend: { position: 'bottom' } } }
+  });
+}
+
+/* ========== DASHBOARD ========== */
+let dashboardRendered = false;
+function renderDashboard() {
+  if (dashboardRendered) return;
+  dashboardRendered = true;
+
+  const container = document.getElementById('dashboard-page');
+  const methods = ['Binary', 'Frequency', 'TF-IDF'];
+  const methodColors = ['#3b82f6', '#f59e0b', '#10b981'];
+  const queryIds = DATA.queries.map(q => q.query_id);
+  const queryTitles = {};
+  DATA.queries.forEach(q => queryTitles[q.query_id] = q.title);
+
+  // Summary table
+  let tableRows = '';
+  methods.forEach(mt => {
+    queryIds.forEach((qid, idx) => {
+      const m = DATA.metrics[mt][qid];
+      tableRows += `<tr>
+        ${idx === 0 ? `<td rowspan="${queryIds.length}" class="method-label">${mt}</td>` : ''}
+        <td>Q${qid}: ${esc(queryTitles[qid])}</td>
+        <td>${m.relevant_count}</td>
+        <td>${m.tp}</td>
+        <td>${colorCell(m.precision)}</td>
+        <td>${colorCell(m.recall)}</td>
+        <td>${colorCell(m.f1)}</td>
+      </tr>`;
+    });
+  });
+
+  // Averages
+  let avgRows = '';
+  methods.forEach(mt => {
+    const avg = (metric) => {
+      const vals = queryIds.map(qid => DATA.metrics[mt][qid][metric]);
+      return vals.reduce((a, b) => a + b, 0) / vals.length;
+    };
+    avgRows += `<tr>
+      <td class="method-label">${mt}</td>
+      <td>${colorCell(avg('precision'))}</td>
+      <td>${colorCell(avg('recall'))}</td>
+      <td>${colorCell(avg('f1'))}</td>
+    </tr>`;
+  });
+
+  container.innerHTML = `
+    <div class="dashboard-header">
+      <h2>Project Dashboard</h2>
+      <p>${DATA.num_documents} documents | ${DATA.vocabulary_size} vocabulary terms | ${DATA.queries.length} queries | 3 vectorization methods</p>
+    </div>
+
+    <div class="summary-table-wrap">
+      <h3>Full Evaluation Results</h3>
+      <table class="summary-table">
+        <thead><tr>
+          <th>Method</th><th>Query</th><th>|Relevant|</th><th>TP</th>
+          <th>Precision</th><th>Recall</th><th>F1</th>
+        </tr></thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+    </div>
+
+    <div class="summary-table-wrap">
+      <h3>Average Metrics by Method</h3>
+      <table class="summary-table">
+        <thead><tr><th>Method</th><th>Avg Precision</th><th>Avg Recall</th><th>Avg F1</th></tr></thead>
+        <tbody>${avgRows}</tbody>
+      </table>
+    </div>
+
+    <div class="dashboard-charts">
+      <div class="dashboard-chart-card">
+        <h3>Precision by Query</h3>
+        <canvas id="dash-precision"></canvas>
+      </div>
+      <div class="dashboard-chart-card">
+        <h3>Recall by Query</h3>
+        <canvas id="dash-recall"></canvas>
+      </div>
+      <div class="dashboard-chart-card">
+        <h3>F1 Score by Query</h3>
+        <canvas id="dash-f1"></canvas>
+      </div>
+      <div class="dashboard-chart-card">
+        <h3>Average Metrics Comparison</h3>
+        <canvas id="dash-avg"></canvas>
+      </div>
+      <div class="dashboard-chart-card full-width">
+        <h3>F1 Score Across Queries &mdash; Method Comparison</h3>
+        <canvas id="dash-f1-line"></canvas>
+      </div>
+      <div class="dashboard-chart-card full-width">
+        <h3>Number of Relevant Documents Found (TP) per Query</h3>
+        <canvas id="dash-tp"></canvas>
+      </div>
+    </div>`;
+
+  const qLabels = queryIds.map(qid => `Q${qid}`);
+
+  // Grouped bar helper
+  function groupedBar(canvasId, metric) {
+    makeChart(canvasId, {
+      type: 'bar',
+      data: {
+        labels: qLabels,
+        datasets: methods.map((mt, i) => ({
+          label: mt,
+          data: queryIds.map(qid => DATA.metrics[mt][qid][metric]),
+          backgroundColor: methodColors[i]
+        }))
+      },
+      options: { responsive: true, scales: { y: { beginAtZero: true, max: 1 } },
+        plugins: { legend: { position: 'bottom' } } }
+    });
+  }
+
+  groupedBar('dash-precision', 'precision');
+  groupedBar('dash-recall', 'recall');
+  groupedBar('dash-f1', 'f1');
+
+  // Avg Metrics
+  const avgMetric = (mt, metric) => {
+    const vals = queryIds.map(qid => DATA.metrics[mt][qid][metric]);
+    return vals.reduce((a, b) => a + b, 0) / vals.length;
+  };
+  makeChart('dash-avg', {
+    type: 'bar',
+    data: {
+      labels: methods,
+      datasets: [
+        { label: 'Precision', data: methods.map(mt => avgMetric(mt, 'precision')), backgroundColor: '#3b82f6' },
+        { label: 'Recall', data: methods.map(mt => avgMetric(mt, 'recall')), backgroundColor: '#f59e0b' },
+        { label: 'F1', data: methods.map(mt => avgMetric(mt, 'f1')), backgroundColor: '#10b981' }
+      ]
+    },
+    options: { responsive: true, scales: { y: { beginAtZero: true, max: 1 } },
+      plugins: { legend: { position: 'bottom' } } }
+  });
+
+  // F1 Line chart
+  makeChart('dash-f1-line', {
+    type: 'line',
+    data: {
+      labels: qLabels,
+      datasets: methods.map((mt, i) => ({
+        label: mt,
+        data: queryIds.map(qid => DATA.metrics[mt][qid].f1),
+        borderColor: methodColors[i],
+        backgroundColor: 'transparent',
+        tension: 0.3,
+        pointRadius: 5,
+        pointBackgroundColor: methodColors[i]
+      }))
+    },
+    options: { responsive: true, scales: { y: { beginAtZero: true, max: 1 } },
+      plugins: { legend: { position: 'bottom' } } }
+  });
+
+  // TP bar chart
+  makeChart('dash-tp', {
+    type: 'bar',
+    data: {
+      labels: qLabels,
+      datasets: methods.map((mt, i) => ({
+        label: mt,
+        data: queryIds.map(qid => DATA.metrics[mt][qid].tp),
+        backgroundColor: methodColors[i]
+      }))
+    },
+    options: { responsive: true, scales: { y: { beginAtZero: true } },
+      plugins: { legend: { position: 'bottom' } } }
+  });
+}
+
+/* ========== CHART HELPER ========== */
+function makeChart(id, config) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+  const canvas = document.getElementById(id);
+  if (!canvas) return;
+  charts[id] = new Chart(canvas.getContext('2d'), config);
+  return charts[id];
+}
+
+/* ========== UTILS ========== */
+function esc(s) {
+  if (!s) return '';
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function colorCell(val) {
+  const pct = Math.round(val * 100);
+  let bg, color;
+  if (val >= 0.3) { bg = '#d1fae5'; color = '#065f46'; }
+  else if (val >= 0.15) { bg = '#fef3c7'; color = '#92400e'; }
+  else { bg = '#fee2e2'; color = '#991b1b'; }
+  return `<span class="heatmap-cell" style="background:${bg};color:${color}">${(val * 100).toFixed(1)}%</span>`;
+}
+
+/* ========== START ========== */
+loadData();
+</script>
+</body>
+</html>
